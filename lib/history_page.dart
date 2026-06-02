@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'detail_history_page.dart'; // <--- BARIS PENTING: Menghubungkan ke file detail baru
 
 class HistoryPage extends StatelessWidget {
   const HistoryPage({super.key});
@@ -13,7 +14,7 @@ class HistoryPage extends StatelessWidget {
     ];
 
     return Scaffold(
-      backgroundColor: Colors.white, // Latar belakang halaman putih bersih
+      backgroundColor: Colors.white,
       appBar: AppBar(
         title: Image.asset(
           'assets/logo_arkadaya.png', 
@@ -40,111 +41,119 @@ class HistoryPage extends StatelessWidget {
             ),
           ),
           
-          // Daftar Riwayat Kartu
           Expanded(
             child: ListView.builder(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               itemCount: historyData.length,
               itemBuilder: (context, index) {
                 final item = historyData[index];
-                return Container(
-                  margin: const EdgeInsets.only(bottom: 20), // Jarak antar kartu
-                  padding: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    color: Colors.white, // Latar belakang kotak putih solid
-                    borderRadius: BorderRadius.circular(24), 
-                    border: Border.all(
-                      color: const Color(0xff0044aa), // Garis pinggir warna biru tua
-                      width: 1.5,
+                
+                // Membungkus kartu dengan GestureDetector agar responsif saat disentuh
+                return GestureDetector(
+                  onTap: () {
+                    // Berpindah halaman ke DetailHistoryPage sambil mengirim data item spesifik
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => DetailHistoryPage(deliveryData: item),
+                      ),
+                    );
+                  },
+                  child: Container(
+                    margin: const EdgeInsets.only(bottom: 20),
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(24), 
+                      border: Border.all(
+                        color: const Color(0xff0044aa),
+                        width: 1.5,
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: const Color(0xff0066cc).withValues(alpha: 0.10),
+                          blurRadius: 12, 
+                          spreadRadius: 1, 
+                          offset: const Offset(0, 4), 
+                        ),
+                      ],
                     ),
-                    boxShadow: [
-                      BoxShadow(
-                        // KODE BARU YANG REKOMENDASIKAN FLUTTER
-color: const Color(0xff0066cc).withValues(alpha: 0.10),
-                        blurRadius: 12, 
-                        spreadRadius: 1, 
-                        offset: const Offset(0, 4), 
-                      ),
-                    ],
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // 1. BAGIAN PALING ATAS: Tanggal & Label Status SELESAI
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text(
-                            item['waktu']!, 
-                            style: const TextStyle(
-                              color: Colors.black, 
-                              fontWeight: FontWeight.bold, 
-                              fontSize: 13,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              item['waktu']!, 
+                              style: const TextStyle(
+                                color: Colors.black, 
+                                fontWeight: FontWeight.bold, 
+                                fontSize: 13,
+                              ),
                             ),
-                          ),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                            decoration: BoxDecoration(
-                              color: const Color(0xffe6f7ed), // Hijau pastel lembut
-                              borderRadius: BorderRadius.circular(20),
-                            ),
-                            child: const Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(Icons.check_circle, color: Color(0xff22bb66), size: 14),
-                                SizedBox(width: 6),
-                                Text(
-                                  'SELESAI', 
-                                  style: TextStyle(
-                                    color: Color(0xff22bb66), 
-                                    fontSize: 11, 
-                                    fontWeight: FontWeight.bold,
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                              decoration: BoxDecoration(
+                                color: const Color(0xffe6f7ed),
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                              child: const Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(Icons.check_circle, color: Color(0xff22bb66), size: 14),
+                                  SizedBox(width: 6),
+                                  Text(
+                                    'SELESAI', 
+                                    style: TextStyle(
+                                      color: Color(0xff22bb66), 
+                                      fontSize: 11, 
+                                      fontWeight: FontWeight.bold,
+                                    ),
                                   ),
-                                ),
-                              ],
+                                ],
+                              ),
+                            )
+                          ],
+                        ),
+                        
+                        const SizedBox(height: 16),
+                        
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Penerima : ', 
+                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.black),
                             ),
-                          )
-                        ],
-                      ),
-                      
-                      const SizedBox(height: 16), // Jarak antara tanggal ke detail info
-                      
-                      // 2. BAGIAN TENGAH: Nama Penerima
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            'Penerima : ', 
-                            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.black),
-                          ),
-                          Expanded(
-                            child: Text(
-                              '${item['penerima']}', 
-                              style: const TextStyle(fontSize: 15, color: Colors.black87),
+                            Expanded(
+                              child: Text(
+                                '${item['penerima']}', 
+                                style: const TextStyle(fontSize: 15, color: Colors.black87),
+                              ),
                             ),
-                          ),
-                        ],
-                      ),
-                      
-                      const SizedBox(height: 6),
-                      
-                      // 3. BAGIAN BAWAH: Alamat Penerima
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            'Alamat     : ', 
-                            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.black),
-                          ),
-                          Expanded(
-                            child: Text(
-                              '${item['alamat']}', 
-                              style: const TextStyle(fontSize: 15, color: Colors.black87, height: 1.2),
+                          ],
+                        ),
+                        
+                        const SizedBox(height: 6),
+                        
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Alamat     : ', 
+                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.black),
                             ),
-                          ),
-                        ],
-                      ),
-                    ],
+                            Expanded(
+                              child: Text(
+                                '${item['alamat']}', 
+                                style: const TextStyle(fontSize: 15, color: Colors.black87, height: 1.2),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
                   ),
                 );
               },
