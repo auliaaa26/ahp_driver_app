@@ -15,7 +15,9 @@ class DeliveryRepository {
   static const String _detailTable = 'detail_pengiriman';
   static const String _proofTable = 'bukti_pengiriman';
   static const String _trackingTable = 'tracking_pengiriman';
-  static const String _proofBucket = 'delivery-proofs';
+  static const String _proofBucket = 'bukti_pengiriman';
+  static const Duration _proofUrlTtl = Duration(days: 7);
+  static const int _maxProofPhotos = 3;
 
   Future<DeliveryTask?> fetchCurrentTask(DriverProfile driver) async {
     final response = await SupabaseService.client
@@ -88,6 +90,10 @@ class DeliveryRepository {
     required DriverProfile driver,
     required File file,
   }) async {
+    if (task.proofCount >= _maxProofPhotos) {
+      throw StateError('Maksimal 3 foto bukti pengiriman.');
+    }
+
     final String extension = file.path.split('.').last.toLowerCase();
     final String filePath =
         '${driver.id}/${task.id}-${DateTime.now().millisecondsSinceEpoch}.$extension';
@@ -98,46 +104,26 @@ class DeliveryRepository {
           fileOptions: FileOptions(upsert: true),
         );
 
-    final String publicUrl =
-        SupabaseService.client.storage.from(_proofBucket).getPublicUrl(filePath);
     final String now = DateTime.now().toIso8601String();
-
-    final existingProof = await SupabaseService.client
-        .from(_proofTable)
-        .select('id_bukti')
-        .eq('id_pengiriman', task.id)
-        .maybeSingle();
-
-    if (existingProof == null) {
-      await SupabaseService.client.from(_proofTable).insert(<String, dynamic>{
-        'id_pengiriman': task.id,
-        'path_foto': publicUrl,
-        'waktu_upload': now,
-      });
-    } else {
-      await SupabaseService.client.from(_proofTable).update(<String, dynamic>{
-        'path_foto': publicUrl,
-        'waktu_upload': now,
-      }).eq('id_bukti', existingProof['id_bukti']);
-    }
-
-    await SupabaseService.client.from(_shipmentTable).update(<String, dynamic>{
-      'status': DeliveryStatus.delivered.value,
-    }).eq('id_pengiriman', task.id);
-
-    await _upsertDetail(
-      task.id,
-      DeliveryStatus.delivered,
-      now,
-      goodsReceiptUrl: publicUrl,
-    );
+    await SupabaseService.client.from(_proofTable).insert(<String, dynamic>{
+      'id_pengiriman': task.id,
+      'path_foto': filePath,
+      'waktu_upload': now,
+    });
 
     await _insertTrackingEvent(
       taskId: task.id,
-      status: DeliveryStatus.delivered,
+      status: task.status,
       timestamp: now,
       location: task.destinationLabel ?? task.recipientAddress,
       description: 'Bukti pengiriman diunggah oleh driver ${driver.name}',
+    );
+
+    await _upsertDetail(
+      task.id,
+      task.status,
+      now,
+      goodsReceiptUrl: filePath,
     );
   }
 
@@ -157,19 +143,31 @@ class DeliveryRepository {
         .select()
         .eq('id_pengiriman', shipmentId)
         .maybeSingle();
-    final proof = await SupabaseService.client
+    final proofRows = await SupabaseService.client
         .from(_proofTable)
         .select()
         .eq('id_pengiriman', shipmentId)
         .order('waktu_upload', ascending: false)
-        .limit(1)
-        .maybeSingle();
+        .limit(_maxProofPhotos);
 
     shipment['paket'] = paket == null ? null : Map<String, dynamic>.from(paket);
     shipment['detail_pengiriman'] =
         detail == null ? null : Map<String, dynamic>.from(detail);
-    shipment['bukti_pengiriman'] =
-        proof == null ? null : Map<String, dynamic>.from(proof);
+    if (proofRows.isEmpty) {
+      shipment['bukti_pengiriman'] = null;
+    } else {
+      final proofMaps = <Map<String, dynamic>>[];
+      for (final item in proofRows) {
+        final proofMap = Map<String, dynamic>.from(item);
+        final proofReference = proofMap['path_foto'] as String?;
+        final resolvedProofUrl = await _resolveProofUrl(proofReference);
+        if (resolvedProofUrl != null) {
+          proofMap['proof_image_url'] = resolvedProofUrl;
+        }
+        proofMaps.add(proofMap);
+      }
+      shipment['bukti_pengiriman'] = proofMaps;
+    }
 
     return shipment;
   }
@@ -244,5 +242,46 @@ class DeliveryRepository {
       // Do not block status/proof updates when tracking uses a stricter legacy enum.
       return;
     }
+  }
+
+  Future<String?> _resolveProofUrl(String? proofReference) async {
+    if (proofReference == null || proofReference.trim().isEmpty) {
+      return null;
+    }
+
+    final reference = proofReference.trim();
+    final path = _extractStoragePath(reference);
+
+    if (path == null) {
+      return reference;
+    }
+
+    try {
+      return await SupabaseService.client.storage
+          .from(_proofBucket)
+          .createSignedUrl(path, _proofUrlTtl.inSeconds);
+    } catch (_) {
+      return reference;
+    }
+  }
+
+  String? _extractStoragePath(String reference) {
+    if (!reference.startsWith('http')) {
+      return reference;
+    }
+
+    final uri = Uri.tryParse(reference);
+    if (uri == null) {
+      return null;
+    }
+
+    final marker = '/$_proofBucket/';
+    final rawPath = uri.path;
+    final index = rawPath.indexOf(marker);
+    if (index == -1) {
+      return null;
+    }
+
+    return Uri.decodeComponent(rawPath.substring(index + marker.length));
   }
 }

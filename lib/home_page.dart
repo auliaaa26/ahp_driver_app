@@ -210,13 +210,30 @@ class _HomePageState extends State<HomePage> {
       return;
     }
 
+    final file = File(pickedFile.path);
+    final fileSize = await file.length();
+    const maxFileSize = 3 * 1024 * 1024;
+
+    if (fileSize > maxFileSize) {
+      if (!mounted) {
+        return;
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Ukuran bukti pengiriman maksimal 3 MB.'),
+        ),
+      );
+      return;
+    }
+
     setState(() => _isUploadingProof = true);
 
     try {
       await _deliveryRepository.uploadProof(
         task: task,
         driver: driverProfile,
-        file: File(pickedFile.path),
+        file: file,
       );
 
       if (!mounted) {
@@ -243,6 +260,16 @@ class _HomePageState extends State<HomePage> {
   }
 
   Future<void> _showUploadOptions() async {
+    final task = _currentTask;
+    if (task != null && task.proofCount >= 3) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Maksimal 3 foto bukti pengiriman per tugas.'),
+        ),
+      );
+      return;
+    }
+
     await showModalBottomSheet<void>(
       context: context,
       builder: (context) {
@@ -289,6 +316,21 @@ class _HomePageState extends State<HomePage> {
         context,
       ).showSnackBar(const SnackBar(content: Text('Tidak bisa membuka Maps.')));
     }
+  }
+
+  void _showProofGallery(List<String> imageUrls, int initialIndex) {
+    showDialog<void>(
+      context: context,
+      builder: (context) {
+        return Dialog(
+          insetPadding: const EdgeInsets.all(20),
+          child: _ProofGalleryViewer(
+            imageUrls: imageUrls,
+            initialIndex: initialIndex,
+          ),
+        );
+      },
+    );
   }
 
   @override
@@ -350,6 +392,8 @@ class _HomePageState extends State<HomePage> {
                 onOpenMaps: _openMaps,
                 onChangeStatus: _showStatusDialog,
                 onUploadProof: _showUploadOptions,
+                onViewProof: (index) =>
+                    _showProofGallery(_currentTask!.proofImageUrls, index),
               ),
           ],
         ),
@@ -366,6 +410,7 @@ class _TaskCard extends StatelessWidget {
     required this.onOpenMaps,
     required this.onChangeStatus,
     required this.onUploadProof,
+    required this.onViewProof,
   });
 
   final DeliveryTask task;
@@ -374,6 +419,7 @@ class _TaskCard extends StatelessWidget {
   final VoidCallback onOpenMaps;
   final VoidCallback onChangeStatus;
   final VoidCallback onUploadProof;
+  final void Function(int index) onViewProof;
 
   @override
   Widget build(BuildContext context) {
@@ -549,7 +595,8 @@ class _TaskCard extends StatelessWidget {
                   borderRadius: BorderRadius.circular(12),
                 ),
               ),
-              onPressed: isUploadingProof ? null : onUploadProof,
+              onPressed:
+                  isUploadingProof || task.proofCount >= 3 ? null : onUploadProof,
               icon: isUploadingProof
                   ? const SizedBox(
                       width: 18,
@@ -561,9 +608,11 @@ class _TaskCard extends StatelessWidget {
                     )
                   : const Icon(Icons.camera_alt, color: Colors.white, size: 20),
               label: Text(
-                task.proofImageUrl == null
-                    ? 'Upload Bukti Pengiriman'
-                    : 'Upload Ulang Bukti Pengiriman',
+                task.proofCount >= 3
+                    ? 'Maksimal 3 Bukti'
+                    : task.hasProofs
+                        ? 'Tambah Bukti Pengiriman'
+                        : 'Upload Bukti Pengiriman',
                 style: const TextStyle(
                   color: Colors.white,
                   fontWeight: FontWeight.bold,
@@ -572,6 +621,51 @@ class _TaskCard extends StatelessWidget {
               ),
             ),
           ),
+          if (task.hasProofs) ...[
+            const SizedBox(height: 14),
+            SizedBox(
+              height: 92,
+              child: ListView.separated(
+                scrollDirection: Axis.horizontal,
+                itemCount: task.proofImageUrls.length,
+                separatorBuilder: (context, index) => const SizedBox(width: 10),
+                itemBuilder: (context, index) {
+                  return GestureDetector(
+                    onTap: () => onViewProof(index),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(14),
+                      child: SizedBox(
+                        width: 120,
+                        child: Image.network(
+                          task.proofImageUrls[index],
+                          fit: BoxFit.cover,
+                          errorBuilder: (context, error, stackTrace) {
+                            return Container(
+                              color: const Color(0xffeef4fb),
+                              alignment: Alignment.center,
+                              child: const Text('Preview tidak tersedia'),
+                            );
+                          },
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+            const SizedBox(height: 8),
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton.icon(
+                onPressed: () => onViewProof(0),
+                icon: const Icon(Icons.visibility_outlined),
+                label: Text('Lihat Bukti (${task.proofCount}/3)'),
+                style: TextButton.styleFrom(
+                  foregroundColor: const Color(0xff0044aa),
+                ),
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -624,6 +718,84 @@ class _InfoCard extends StatelessWidget {
               foregroundColor: Colors.white,
             ),
             child: Text(actionLabel),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ProofGalleryViewer extends StatefulWidget {
+  const _ProofGalleryViewer({
+    required this.imageUrls,
+    required this.initialIndex,
+  });
+
+  final List<String> imageUrls;
+  final int initialIndex;
+
+  @override
+  State<_ProofGalleryViewer> createState() => _ProofGalleryViewerState();
+}
+
+class _ProofGalleryViewerState extends State<_ProofGalleryViewer> {
+  late final PageController _pageController;
+  late int _currentIndex;
+
+  @override
+  void initState() {
+    super.initState();
+    _currentIndex = widget.initialIndex;
+    _pageController = PageController(initialPage: widget.initialIndex);
+  }
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: double.infinity,
+      height: 420,
+      child: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text('Bukti ${_currentIndex + 1}/${widget.imageUrls.length}'),
+                IconButton(
+                  onPressed: () => Navigator.pop(context),
+                  icon: const Icon(Icons.close),
+                ),
+              ],
+            ),
+          ),
+          Expanded(
+            child: PageView.builder(
+              controller: _pageController,
+              itemCount: widget.imageUrls.length,
+              onPageChanged: (index) {
+                setState(() => _currentIndex = index);
+              },
+              itemBuilder: (context, index) {
+                return InteractiveViewer(
+                  child: Image.network(
+                    widget.imageUrls[index],
+                    fit: BoxFit.contain,
+                    errorBuilder: (context, error, stackTrace) {
+                      return const Center(
+                        child: Text('Gagal menampilkan bukti pengiriman.'),
+                      );
+                    },
+                  ),
+                );
+              },
+            ),
           ),
         ],
       ),

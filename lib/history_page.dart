@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import 'core/supabase/supabase_service.dart';
 import 'features/deliveries/delivery_repository.dart';
@@ -75,15 +74,19 @@ class _HistoryPageState extends State<HistoryPage> {
     }
   }
 
-  Future<void> _openProof(String url) async {
-    final uri = Uri.parse(url);
-    final launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
-
-    if (!launched && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Tidak bisa membuka bukti pengiriman.')),
-      );
-    }
+  Future<void> _openProofGallery(List<String> urls, int initialIndex) async {
+    showDialog<void>(
+      context: context,
+      builder: (context) {
+        return Dialog(
+          insetPadding: const EdgeInsets.all(20),
+          child: _HistoryProofGalleryViewer(
+            imageUrls: urls,
+            initialIndex: initialIndex,
+          ),
+        );
+      },
+    );
   }
 
   String _formatTimestamp(DateTime? dateTime) {
@@ -153,9 +156,9 @@ class _HistoryPageState extends State<HistoryPage> {
                   timestampText: _formatTimestamp(
                     task.deliveredAt ?? task.createdAt,
                   ),
-                  onOpenProof: task.proofImageUrl == null
-                      ? null
-                      : () => _openProof(task.proofImageUrl!),
+                  onOpenProofGallery: task.hasProofs
+                      ? (index) => _openProofGallery(task.proofImageUrls, index)
+                      : null,
                 ),
               ),
           ],
@@ -169,12 +172,12 @@ class _HistoryTaskCard extends StatelessWidget {
   const _HistoryTaskCard({
     required this.task,
     required this.timestampText,
-    this.onOpenProof,
+    this.onOpenProofGallery,
   });
 
   final DeliveryTask task;
   final String timestampText;
-  final VoidCallback? onOpenProof;
+  final void Function(int index)? onOpenProofGallery;
 
   @override
   Widget build(BuildContext context) {
@@ -294,14 +297,45 @@ class _HistoryTaskCard extends StatelessWidget {
               ),
             ],
           ),
-          if (onOpenProof != null) ...[
+          if (task.hasProofs && onOpenProofGallery != null) ...[
+            const SizedBox(height: 14),
+            SizedBox(
+              height: 92,
+              child: ListView.separated(
+                scrollDirection: Axis.horizontal,
+                itemCount: task.proofImageUrls.length,
+                separatorBuilder: (context, index) => const SizedBox(width: 10),
+                itemBuilder: (context, index) {
+                  return GestureDetector(
+                    onTap: () => onOpenProofGallery!(index),
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(14),
+                      child: SizedBox(
+                        width: 120,
+                        child: Image.network(
+                          task.proofImageUrls[index],
+                          fit: BoxFit.cover,
+                          errorBuilder: (context, error, stackTrace) {
+                            return Container(
+                              color: const Color(0xffeef4fb),
+                              alignment: Alignment.center,
+                              child: const Text('Preview tidak tersedia'),
+                            );
+                          },
+                        ),
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
             const SizedBox(height: 14),
             Align(
               alignment: Alignment.centerRight,
               child: TextButton.icon(
-                onPressed: onOpenProof,
+                onPressed: () => onOpenProofGallery!(0),
                 icon: const Icon(Icons.photo_outlined),
-                label: const Text('Lihat Bukti'),
+                label: Text('Lihat Bukti (${task.proofCount}/3)'),
                 style: TextButton.styleFrom(
                   foregroundColor: const Color(0xff0044aa),
                 ),
@@ -350,6 +384,85 @@ class _HistoryInfoCard extends StatelessWidget {
               foregroundColor: Colors.white,
             ),
             child: Text(actionLabel),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _HistoryProofGalleryViewer extends StatefulWidget {
+  const _HistoryProofGalleryViewer({
+    required this.imageUrls,
+    required this.initialIndex,
+  });
+
+  final List<String> imageUrls;
+  final int initialIndex;
+
+  @override
+  State<_HistoryProofGalleryViewer> createState() =>
+      _HistoryProofGalleryViewerState();
+}
+
+class _HistoryProofGalleryViewerState extends State<_HistoryProofGalleryViewer> {
+  late final PageController _pageController;
+  late int _currentIndex;
+
+  @override
+  void initState() {
+    super.initState();
+    _currentIndex = widget.initialIndex;
+    _pageController = PageController(initialPage: widget.initialIndex);
+  }
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: double.infinity,
+      height: 420,
+      child: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text('Bukti ${_currentIndex + 1}/${widget.imageUrls.length}'),
+                IconButton(
+                  onPressed: () => Navigator.pop(context),
+                  icon: const Icon(Icons.close),
+                ),
+              ],
+            ),
+          ),
+          Expanded(
+            child: PageView.builder(
+              controller: _pageController,
+              itemCount: widget.imageUrls.length,
+              onPageChanged: (index) {
+                setState(() => _currentIndex = index);
+              },
+              itemBuilder: (context, index) {
+                return InteractiveViewer(
+                  child: Image.network(
+                    widget.imageUrls[index],
+                    fit: BoxFit.contain,
+                    errorBuilder: (context, error, stackTrace) {
+                      return const Center(
+                        child: Text('Tidak bisa menampilkan bukti pengiriman.'),
+                      );
+                    },
+                  ),
+                );
+              },
+            ),
           ),
         ],
       ),

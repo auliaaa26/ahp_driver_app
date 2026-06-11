@@ -24,8 +24,8 @@ class DeliveryTask {
     this.weightKg,
     this.itemType,
     this.distanceKm,
-    this.proofImagePath,
-    this.proofImageUrl,
+    this.proofImagePaths = const <String>[],
+    this.proofImageUrls = const <String>[],
     this.deliveredAt,
   });
 
@@ -48,12 +48,14 @@ class DeliveryTask {
   final String? itemType;
   final double? distanceKm;
   final DeliveryStatus status;
-  final String? proofImagePath;
-  final String? proofImageUrl;
+  final List<String> proofImagePaths;
+  final List<String> proofImageUrls;
   final DateTime createdAt;
   final DateTime? deliveredAt;
 
   bool get isDelivered => status == DeliveryStatus.delivered;
+  bool get hasProofs => proofImageUrls.isNotEmpty;
+  int get proofCount => proofImageUrls.length;
 
   factory DeliveryTask.fromMap(Map<String, dynamic> map) {
     final paket = map['paket'] is Map<String, dynamic>
@@ -66,11 +68,20 @@ class DeliveryTask {
         : map['detail_pengiriman'] is Map
             ? Map<String, dynamic>.from(map['detail_pengiriman'] as Map)
             : null;
-    final proof = map['bukti_pengiriman'] is Map<String, dynamic>
-        ? map['bukti_pengiriman'] as Map<String, dynamic>
-        : map['bukti_pengiriman'] is Map
-            ? Map<String, dynamic>.from(map['bukti_pengiriman'] as Map)
-            : null;
+    final proofItems = map['bukti_pengiriman'] is List
+        ? (map['bukti_pengiriman'] as List)
+            .whereType<Map>()
+            .map((item) => Map<String, dynamic>.from(item))
+            .toList()
+        : map['bukti_pengiriman'] is Map<String, dynamic>
+            ? <Map<String, dynamic>>[
+                map['bukti_pengiriman'] as Map<String, dynamic>,
+              ]
+            : map['bukti_pengiriman'] is Map
+                ? <Map<String, dynamic>>[
+                    Map<String, dynamic>.from(map['bukti_pengiriman'] as Map),
+                  ]
+                : <Map<String, dynamic>>[];
 
     return DeliveryTask(
       id: map['id_pengiriman'] as int,
@@ -99,8 +110,18 @@ class DeliveryTask {
       status: DeliveryStatus.fromValue(
         (map['status'] as String?) ?? DeliveryStatus.pending.value,
       ),
-      proofImagePath: proof?['path_foto'] as String?,
-      proofImageUrl: proof?['path_foto'] as String?,
+      proofImagePaths: proofItems
+          .map((item) => item['path_foto'] as String?)
+          .whereType<String>()
+          .toList(),
+      proofImageUrls: proofItems
+          .map(
+            (item) =>
+                item['proof_image_url'] as String? ??
+                item['path_foto'] as String?,
+          )
+          .whereType<String>()
+          .toList(),
       createdAt: DateTime.parse(map['created_at'] as String),
       deliveredAt: detail?['delivered_at'] == null
           ? null
