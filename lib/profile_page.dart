@@ -22,6 +22,7 @@ class _ProfilePageState extends State<ProfilePage> {
   File? _localImage;
   DriverProfile? _profile;
   bool _isLoading = true;
+  bool _isUploadingAvatar = false;
   bool _isSigningOut = false;
   String? _errorMessage;
 
@@ -78,8 +79,8 @@ class _ProfilePageState extends State<ProfilePage> {
   }
 
   Future<void> _pickImage() async {
-    final currentUser = SupabaseService.currentUser;
-    if (currentUser == null) {
+    final profile = _profile;
+    if (profile == null) {
       return;
     }
 
@@ -92,7 +93,66 @@ class _ProfilePageState extends State<ProfilePage> {
       return;
     }
 
-    setState(() => _localImage = File(pickedFile.path));
+    final file = File(pickedFile.path);
+    final fileSize = await file.length();
+    const maxFileSize = 3 * 1024 * 1024;
+
+    if (fileSize > maxFileSize) {
+      if (!mounted) {
+        return;
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Ukuran foto maksimal 3 MB.'),
+        ),
+      );
+      return;
+    }
+
+    setState(() {
+      _localImage = file;
+      _isUploadingAvatar = true;
+    });
+
+    try {
+      final updatedProfile = await _profileRepository.uploadAvatar(
+        profile: profile,
+        file: file,
+      );
+
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _profile = updatedProfile;
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Foto profil berhasil diperbarui.'),
+        ),
+      );
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _localImage = null;
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Gagal mengunggah foto profil: $error'),
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _isUploadingAvatar = false);
+      }
+    }
   }
 
   Future<void> _handleSignOut() async {
@@ -128,6 +188,7 @@ class _ProfilePageState extends State<ProfilePage> {
     final profileEmail = profile?.email ?? currentUser?.email ?? '-';
     final profilePhone = profile?.phone ?? '-';
     final profileRole = profile?.role ?? 'Supir Pengiriman';
+    final avatarUrl = profile?.avatarUrl;
 
     return Scaffold(
       backgroundColor: Colors.white,
@@ -165,8 +226,12 @@ class _ProfilePageState extends State<ProfilePage> {
                       radius: 70,
                       backgroundColor: const Color(0xff0066cc),
                       backgroundImage:
-                          _localImage != null ? FileImage(_localImage!) : null,
-                      child: _localImage == null
+                          _localImage != null
+                              ? FileImage(_localImage!)
+                              : (avatarUrl != null
+                                  ? NetworkImage(avatarUrl)
+                                  : null),
+                      child: _localImage == null && avatarUrl == null
                           ? const Icon(
                               Icons.person,
                               size: 90,
@@ -178,7 +243,7 @@ class _ProfilePageState extends State<ProfilePage> {
                       bottom: 5,
                       right: 5,
                       child: GestureDetector(
-                        onTap: _pickImage,
+                        onTap: _isUploadingAvatar ? null : _pickImage,
                         child: Container(
                           padding: const EdgeInsets.all(6),
                           decoration: BoxDecoration(
@@ -186,11 +251,22 @@ class _ProfilePageState extends State<ProfilePage> {
                             shape: BoxShape.circle,
                             border: Border.all(color: Colors.white, width: 2),
                           ),
-                          child: const Icon(
-                            Icons.edit,
-                            color: Colors.white,
-                            size: 20,
-                          ),
+                          child: _isUploadingAvatar
+                              ? const SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    valueColor: AlwaysStoppedAnimation<Color>(
+                                      Colors.white,
+                                    ),
+                                  ),
+                                )
+                              : const Icon(
+                                  Icons.edit,
+                                  color: Colors.white,
+                                  size: 20,
+                                ),
                         ),
                       ),
                     ),

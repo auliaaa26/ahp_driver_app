@@ -6,6 +6,7 @@ class DriverProfile {
     this.email,
     this.phone,
     this.role,
+    this.avatarUrl,
   });
 
   final int id;
@@ -14,6 +15,7 @@ class DriverProfile {
   final String? email;
   final String? phone;
   final String? role;
+  final String? avatarUrl;
 
   factory DriverProfile.fromMap(Map<String, dynamic> map) {
     return DriverProfile(
@@ -23,6 +25,7 @@ class DriverProfile {
       email: map['email'] as String?,
       phone: map['no_hp'] as String?,
       role: map['role'] as String?,
+      avatarUrl: map['avatar_url'] as String?,
     );
   }
 }
