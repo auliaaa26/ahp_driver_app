@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'core/supabase/supabase_config.dart';
+import 'core/supabase/supabase_service.dart';
+import 'features/profile/profile_repository.dart';
 import 'home_page.dart';
 
 class LoginPage extends StatefulWidget {
@@ -9,7 +12,82 @@ class LoginPage extends StatefulWidget {
 }
 
 class _LoginPageState extends State<LoginPage> {
+  final ProfileRepository _profileRepository = const ProfileRepository();
   bool _obscureText = true;
+  final TextEditingController _emailController = TextEditingController();
+  final TextEditingController _passwordController = TextEditingController();
+  bool _isSubmitting = false;
+
+  @override
+  void dispose() {
+    _emailController.dispose();
+    _passwordController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _handleSignIn() async {
+    if (!SupabaseConfig.isConfigured) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Supabase belum dikonfigurasi. Isi SUPABASE_URL dan '
+            'SUPABASE_PUBLISHABLE_KEY terlebih dahulu.',
+          ),
+        ),
+      );
+      return;
+    }
+
+    final email = _emailController.text.trim();
+    final password = _passwordController.text;
+
+    if (email.isEmpty || password.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Email dan password wajib diisi.'),
+        ),
+      );
+      return;
+    }
+
+    setState(() => _isSubmitting = true);
+
+    try {
+      await SupabaseService.signInWithPassword(
+        email: email,
+        password: password,
+      );
+
+      await _profileRepository.fetchDriverProfileByEmail(email);
+
+      if (!mounted) {
+        return;
+      }
+
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (context) => const MainNavigation()),
+      );
+    } catch (error) {
+      if (SupabaseService.currentSession != null) {
+        await SupabaseService.signOut();
+      }
+
+      if (!mounted) {
+        return;
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Login gagal: $error'),
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _isSubmitting = false);
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -118,9 +196,12 @@ class _LoginPageState extends State<LoginPage> {
 
                   // Input Username / Email
                   TextField(
+                    controller: _emailController,
+                    keyboardType: TextInputType.emailAddress,
+                    textInputAction: TextInputAction.next,
                     decoration: InputDecoration(
                       prefixIcon: const Icon(Icons.person_outline, color: Colors.grey, size: 26),
-                      hintText: 'Username atau Email',
+                      hintText: 'Email',
                       hintStyle: const TextStyle(color: Colors.grey, fontSize: 15),
                       contentPadding: const EdgeInsets.symmetric(vertical: 16),
                       enabledBorder: OutlineInputBorder(
@@ -137,7 +218,16 @@ class _LoginPageState extends State<LoginPage> {
 
                   // Input Password
                   TextField(
+                    controller: _passwordController,
                     obscureText: _obscureText,
+                    textInputAction: TextInputAction.done,
+                    onSubmitted: (_) {
+                      if (_isSubmitting) {
+                        return;
+                      }
+
+                      _handleSignIn();
+                    },
                     decoration: InputDecoration(
                       prefixIcon: const Icon(Icons.lock_outline, color: Colors.grey, size: 26),
                       suffixIcon: IconButton(
@@ -187,18 +277,40 @@ class _LoginPageState extends State<LoginPage> {
                           borderRadius: BorderRadius.circular(14),
                         ),
                       ),
-                      onPressed: () {
-                        Navigator.pushReplacement(
-                          context,
-                          MaterialPageRoute(builder: (context) => const MainNavigation()),
-                        );
-                      },
-                      child: const Text(
-                        'Sign In', 
-                        style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
-                      ),
+                      onPressed: _isSubmitting ? null : _handleSignIn,
+                      child: _isSubmitting
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                valueColor: AlwaysStoppedAnimation<Color>(
+                                  Colors.white,
+                                ),
+                              ),
+                            )
+                          : const Text(
+                              'Sign In',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
                     ),
                   ),
+                  if (!SupabaseConfig.isConfigured) ...[
+                    const SizedBox(height: 16),
+                    const Text(
+                      'Mode demo aktif. Tambahkan konfigurasi Supabase agar login memakai Supabase Auth.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: Colors.orange,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),

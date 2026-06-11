@@ -1,8 +1,13 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import 'core/supabase/supabase_service.dart';
+import 'home_page.dart';
 import 'login_page.dart';
 
-void main() {
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await SupabaseService.initialize();
+
   runApp(const MyApp());
 }
 
@@ -104,22 +109,21 @@ class _SplashScreenState extends State<SplashScreen>
     if (!mounted) return;
 
     Navigator.pushReplacement(
-  context,
-  PageRouteBuilder(
-    pageBuilder: (context, animation, secondaryAnimation) =>
-        const LoginPage(),
-    transitionsBuilder:
-        (context, animation, secondaryAnimation, child) {
-      return FadeTransition(
-        opacity: animation,
-        child: child,
-      );
-    },
-    transitionDuration: const Duration(milliseconds: 500),
-  ),
-);
-
-  
+      context,
+      PageRouteBuilder(
+        pageBuilder: (context, animation, secondaryAnimation) =>
+            SupabaseService.currentSession == null
+                ? const LoginPage()
+                : const MainNavigation(),
+        transitionsBuilder: (context, animation, secondaryAnimation, child) {
+          return FadeTransition(
+            opacity: animation,
+            child: child,
+          );
+        },
+        transitionDuration: const Duration(milliseconds: 500),
+      ),
+    );
   }
 
   @override
