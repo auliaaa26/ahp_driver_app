@@ -182,7 +182,7 @@ class _HomePageState extends State<HomePage> {
 
   @override
   void dispose() {
-    LocationService().stopTracking();
+    // LocationService().stopTracking(); // keep tracking active
     super.dispose();
   }
 

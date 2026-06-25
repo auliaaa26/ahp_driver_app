@@ -12,11 +12,13 @@ class LocationService {
   int? _trackedDriverId;
 
   Future<bool> requestPermission() async {
+    debugPrint('Requesting location permission...');
     bool serviceEnabled;
     LocationPermission permission;
 
     serviceEnabled = await Geolocator.isLocationServiceEnabled();
     if (!serviceEnabled) {
+      debugPrint('Location services disabled');
       return false;
     }
 
@@ -24,14 +26,17 @@ class LocationService {
     if (permission == LocationPermission.denied) {
       permission = await Geolocator.requestPermission();
       if (permission == LocationPermission.denied) {
+        debugPrint('Permission denied by user');
         return false;
       }
     }
 
     if (permission == LocationPermission.deniedForever) {
+      debugPrint('Permission denied forever');
       return false;
     }
 
+    debugPrint('Location permission granted');
     return true;
   }
 
