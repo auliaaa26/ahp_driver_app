@@ -1,6 +1,8 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'core/supabase/supabase_service.dart';
+import 'core/utils/location_service.dart';
+import 'features/profile/profile_repository.dart';
 import 'home_page.dart';
 import 'login_page.dart';
 
@@ -51,7 +53,6 @@ class _SplashScreenState extends State<SplashScreen>
       duration: const Duration(milliseconds: 3000),
     );
 
-    // pintu buka
     _doorAnimation = Tween<double>(
       begin: 0,
       end: 1,
@@ -66,7 +67,6 @@ class _SplashScreenState extends State<SplashScreen>
       ),
     );
 
-    // teks fade
     _textFade = Tween<double>(
       begin: 0,
       end: 1,
@@ -81,7 +81,6 @@ class _SplashScreenState extends State<SplashScreen>
       ),
     );
 
-    // teks scale
     _textScale = Tween<double>(
       begin: 0.8,
       end: 1,
@@ -102,9 +101,23 @@ class _SplashScreenState extends State<SplashScreen>
   Future<void> _start() async {
     await _controller.forward();
 
-    await Future.delayed(
-      const Duration(milliseconds: 700),
-    );
+    await Future.delayed(const Duration(milliseconds: 700));
+
+    if (!mounted) return;
+
+    // ✅ Jika session masih aktif (buka ulang app), langsung start tracking
+    if (SupabaseService.currentSession != null) {
+      try {
+        final email = SupabaseService.currentUser?.email;
+        if (email != null && email.isNotEmpty) {
+          final profile = await const ProfileRepository()
+              .fetchDriverProfileByEmail(email);
+          await LocationService().startTracking(profile.id);
+        }
+      } catch (_) {
+        // Abaikan error, tetap lanjut ke MainNavigation
+      }
+    }
 
     if (!mounted) return;
 
@@ -141,15 +154,12 @@ class _SplashScreenState extends State<SplashScreen>
       body: AnimatedBuilder(
         animation: _controller,
         builder: (context, _) {
-          // 0 -> tertutup, 90 -> terbuka
           final angle = _doorAnimation.value * (math.pi / 2);
 
           return Stack(
             children: [
-              // background putih
               Container(color: const Color(0xff0066cc)),
 
-              // kiri
               Positioned(
                 left: 0,
                 top: 0,
@@ -166,7 +176,6 @@ class _SplashScreenState extends State<SplashScreen>
                 ),
               ),
 
-              // kanan
               Positioned(
                 right: 0,
                 top: 0,
@@ -183,7 +192,6 @@ class _SplashScreenState extends State<SplashScreen>
                 ),
               ),
 
-              // garis tengah
               Opacity(
                 opacity: 1 - _doorAnimation.value,
                 child: Center(
@@ -194,17 +202,16 @@ class _SplashScreenState extends State<SplashScreen>
                 ),
               ),
 
-              // teks
               Center(
                 child: FadeTransition(
                   opacity: _textFade,
                   child: ScaleTransition(
                     scale: _textScale,
-                    child: Padding(
-                      padding: const EdgeInsets.all(24),
+                    child: const Padding(
+                      padding: EdgeInsets.all(24),
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
-                        children: const [
+                        children: [
                           Text(
                             'Welcome to\nAHP Driver APP',
                             textAlign: TextAlign.center,

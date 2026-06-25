@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
 import 'core/supabase/supabase_service.dart';
+import 'core/utils/location_service.dart';
 import 'features/profile/driver_profile.dart';
 import 'features/profile/profile_repository.dart';
 import 'login_page.dart';
@@ -56,17 +57,13 @@ class _ProfilePageState extends State<ProfilePage> {
 
       final profile = await _profileRepository.fetchProfileByEmail(email);
 
-      if (!mounted) {
-        return;
-      }
+      if (!mounted) return;
 
       setState(() {
         _profile = profile;
       });
     } catch (error) {
-      if (!mounted) {
-        return;
-      }
+      if (!mounted) return;
 
       setState(() {
         _errorMessage = 'Gagal memuat profil: $error';
@@ -80,27 +77,21 @@ class _ProfilePageState extends State<ProfilePage> {
 
   Future<void> _pickImage() async {
     final profile = _profile;
-    if (profile == null) {
-      return;
-    }
+    if (profile == null) return;
 
     final XFile? pickedFile = await _picker.pickImage(
       source: ImageSource.gallery,
       imageQuality: 80,
     );
 
-    if (pickedFile == null) {
-      return;
-    }
+    if (pickedFile == null) return;
 
     final file = File(pickedFile.path);
     final fileSize = await file.length();
     const maxFileSize = 3 * 1024 * 1024;
 
     if (fileSize > maxFileSize) {
-      if (!mounted) {
-        return;
-      }
+      if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -121,9 +112,7 @@ class _ProfilePageState extends State<ProfilePage> {
         file: file,
       );
 
-      if (!mounted) {
-        return;
-      }
+      if (!mounted) return;
 
       setState(() {
         _profile = updatedProfile;
@@ -135,9 +124,7 @@ class _ProfilePageState extends State<ProfilePage> {
         ),
       );
     } catch (error) {
-      if (!mounted) {
-        return;
-      }
+      if (!mounted) return;
 
       setState(() {
         _localImage = null;
@@ -159,11 +146,12 @@ class _ProfilePageState extends State<ProfilePage> {
     setState(() => _isSigningOut = true);
 
     try {
+      // ✅ STOP LOCATION TRACKING sebelum logout
+      LocationService().stopTracking();
+
       await SupabaseService.signOut();
 
-      if (!mounted) {
-        return;
-      }
+      if (!mounted) return;
 
       Navigator.pushAndRemoveUntil(
         context,
@@ -216,12 +204,11 @@ class _ProfilePageState extends State<ProfilePage> {
                     CircleAvatar(
                       radius: 70,
                       backgroundColor: const Color(0xff0066cc),
-                      backgroundImage:
-                          _localImage != null
-                              ? FileImage(_localImage!)
-                              : (avatarUrl != null
-                                  ? NetworkImage(avatarUrl)
-                                  : null),
+                      backgroundImage: _localImage != null
+                          ? FileImage(_localImage!)
+                          : (avatarUrl != null
+                              ? NetworkImage(avatarUrl)
+                              : null),
                       child: _localImage == null && avatarUrl == null
                           ? const Icon(
                               Icons.person,
@@ -240,7 +227,8 @@ class _ProfilePageState extends State<ProfilePage> {
                           decoration: BoxDecoration(
                             color: const Color(0xff4488cc),
                             shape: BoxShape.circle,
-                            border: Border.all(color: Colors.white, width: 2),
+                            border:
+                                Border.all(color: Colors.white, width: 2),
                           ),
                           child: _isUploadingAvatar
                               ? const SizedBox(
@@ -248,7 +236,8 @@ class _ProfilePageState extends State<ProfilePage> {
                                   height: 20,
                                   child: CircularProgressIndicator(
                                     strokeWidth: 2,
-                                    valueColor: AlwaysStoppedAnimation<Color>(
+                                    valueColor:
+                                        AlwaysStoppedAnimation<Color>(
                                       Colors.white,
                                     ),
                                   ),
@@ -277,7 +266,8 @@ class _ProfilePageState extends State<ProfilePage> {
               Text(
                 profileRole,
                 textAlign: TextAlign.center,
-                style: const TextStyle(color: Colors.black54, fontSize: 16),
+                style:
+                    const TextStyle(color: Colors.black54, fontSize: 16),
               ),
               const SizedBox(height: 30),
               Container(
@@ -331,7 +321,8 @@ class _ProfilePageState extends State<ProfilePage> {
                         : const Row(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              Icon(Icons.logout, color: Colors.black, size: 20),
+                              Icon(Icons.logout,
+                                  color: Colors.black, size: 20),
                               SizedBox(width: 8),
                               Text(
                                 'Keluar',
@@ -366,7 +357,8 @@ class _ProfilePageState extends State<ProfilePage> {
         Expanded(
           child: Container(
             constraints: const BoxConstraints(minHeight: 35),
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            padding:
+                const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             decoration: BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.circular(8),

@@ -106,7 +106,7 @@ class LocationService {
             'longitude': position.longitude,
             'updated_at': DateTime.now().toUtc().toIso8601String(),
           },
-          onConflict: const ['driver_id'],
+          onConflict: 'driver_id',
         );
     } catch (e) {
       debugPrint('Error updating location: $e');
