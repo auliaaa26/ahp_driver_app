@@ -99,12 +99,15 @@ class LocationService {
     if (driverId == null || !SupabaseService.isReady) return;
 
     try {
-      await SupabaseService.client.from('driver_locations').upsert(<String, dynamic>{
-        'driver_id': driverId,
-        'latitude': position.latitude,
-        'longitude': position.longitude,
-        'updated_at': DateTime.now().toUtc().toIso8601String(),
-      });
+      await SupabaseService.client.from('driver_locations').upsert(
+          {
+            'driver_id': driverId,
+            'latitude': position.latitude,
+            'longitude': position.longitude,
+            'updated_at': DateTime.now().toUtc().toIso8601String(),
+          },
+          onConflict: const ['driver_id'],
+        );
     } catch (e) {
       debugPrint('Error updating location: $e');
     }
