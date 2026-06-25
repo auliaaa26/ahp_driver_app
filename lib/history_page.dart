@@ -7,7 +7,8 @@ import 'features/deliveries/delivery_task.dart';
 import 'features/profile/profile_repository.dart';
 
 class HistoryPage extends StatefulWidget {
-  const HistoryPage({super.key});
+  final String searchQuery;
+  const HistoryPage({super.key, this.searchQuery = ''});
 
   @override
   State<HistoryPage> createState() => _HistoryPageState();
@@ -99,19 +100,17 @@ class _HistoryPageState extends State<HistoryPage> {
 
   @override
   Widget build(BuildContext context) {
+    final filteredHistory = _history.where((task) {
+      if (widget.searchQuery.isEmpty) return true;
+      final q = widget.searchQuery.toLowerCase();
+      return task.trackingNumber.toLowerCase().contains(q) ||
+          task.recipientName.toLowerCase().contains(q) ||
+          task.itemName.toLowerCase().contains(q) ||
+          task.recipientAddress.toLowerCase().contains(q);
+    }).toList();
+
     return Scaffold(
       backgroundColor: Colors.white,
-      appBar: AppBar(
-        title: Image.asset(
-          'assets/logo_arkadaya.png',
-          height: 80,
-          fit: BoxFit.contain,
-        ),
-        titleSpacing: 16,
-        backgroundColor: Colors.white,
-        foregroundColor: const Color(0xff003366),
-        elevation: 0,
-      ),
       body: RefreshIndicator(
         onRefresh: _loadHistory,
         child: ListView(
@@ -149,8 +148,14 @@ class _HistoryPageState extends State<HistoryPage> {
                 actionLabel: 'Refresh',
                 onPressed: _loadHistory,
               )
+            else if (filteredHistory.isEmpty)
+              _HistoryInfoCard(
+                message: 'Tidak ada riwayat pengiriman yang cocok dengan pencarian "${widget.searchQuery}".',
+                actionLabel: 'Refresh',
+                onPressed: _loadHistory,
+              )
             else
-              ..._history.map(
+              ...filteredHistory.map(
                 (task) => _HistoryTaskCard(
                   task: task,
                   timestampText: _formatTimestamp(

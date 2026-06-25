@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
 import 'core/supabase/supabase_service.dart';
+import 'core/utils/location_service.dart';
 import 'core/utils/maps_launcher.dart';
 import 'features/deliveries/delivery_repository.dart';
 import 'features/deliveries/delivery_status.dart';
@@ -22,22 +23,121 @@ class MainNavigation extends StatefulWidget {
 
 class _MainNavigationState extends State<MainNavigation> {
   int _currentIndex = 0;
+  bool _isSearching = false;
+  String _searchQuery = '';
+  final TextEditingController _searchController = TextEditingController();
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  AppBar? _buildAppBar() {
+    if (_currentIndex == 2) {
+      return AppBar(
+        title: const Text(
+          'Profile',
+          style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
+        ),
+        centerTitle: true,
+        backgroundColor: Colors.white,
+        elevation: 0,
+      );
+    }
+
+    if (_isSearching) {
+      return AppBar(
+        backgroundColor: Colors.white,
+        foregroundColor: const Color(0xff003366),
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () {
+            setState(() {
+              _isSearching = false;
+              _searchQuery = '';
+              _searchController.clear();
+            });
+          },
+        ),
+        title: TextField(
+          controller: _searchController,
+          autofocus: true,
+          decoration: const InputDecoration(
+            hintText: 'Cari...',
+            border: InputBorder.none,
+            hintStyle: TextStyle(color: Colors.grey),
+          ),
+          style: const TextStyle(color: Colors.black, fontSize: 16),
+          onChanged: (value) {
+            setState(() {
+              _searchQuery = value;
+            });
+          },
+        ),
+        actions: [
+          if (_searchQuery.isNotEmpty)
+            IconButton(
+              icon: const Icon(Icons.clear),
+              onPressed: () {
+                setState(() {
+                  _searchQuery = '';
+                  _searchController.clear();
+                });
+              },
+            ),
+        ],
+      );
+    }
+
+    return AppBar(
+      title: Image.asset(
+        'assets/logo_arkadaya.png',
+        height: 80,
+        fit: BoxFit.contain,
+      ),
+      titleSpacing: _currentIndex == 0 ? 20 : 16,
+      backgroundColor: Colors.white,
+      foregroundColor: const Color(0xff003366),
+      elevation: 0,
+      actions: [
+        IconButton(
+          icon: const Icon(Icons.search),
+          onPressed: () {
+            setState(() {
+              _isSearching = true;
+            });
+          },
+        ),
+        const SizedBox(width: 8),
+      ],
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     final List<Widget> children = <Widget>[
-      const HomePage(),
-      const HistoryPage(),
+      HomePage(searchQuery: _searchQuery),
+      HistoryPage(searchQuery: _searchQuery),
       const ProfilePage(),
     ];
 
     return Scaffold(
+      appBar: _buildAppBar(),
       body: children[_currentIndex],
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _currentIndex,
         selectedItemColor: const Color(0xff0066cc),
         unselectedItemColor: Colors.grey,
-        onTap: (index) => setState(() => _currentIndex = index),
+        onTap: (index) {
+          setState(() {
+            _currentIndex = index;
+            _isSearching = false;
+            _searchQuery = '';
+            _searchController.clear();
+          });
+        },
         items: const [
           BottomNavigationBarItem(
             icon: Icon(Icons.access_time_filled),
@@ -55,7 +155,8 @@ class _MainNavigationState extends State<MainNavigation> {
 }
 
 class HomePage extends StatefulWidget {
-  const HomePage({super.key});
+  final String searchQuery;
+  const HomePage({super.key, this.searchQuery = ''});
 
   @override
   State<HomePage> createState() => _HomePageState();
@@ -77,6 +178,12 @@ class _HomePageState extends State<HomePage> {
   void initState() {
     super.initState();
     _loadCurrentTask();
+  }
+
+  @override
+  void dispose() {
+    LocationService().stopTracking();
+    super.dispose();
   }
 
   Future<void> _loadCurrentTask() async {
@@ -112,6 +219,12 @@ class _HomePageState extends State<HomePage> {
         _driverProfile = driverProfile;
         _currentTask = task;
       });
+
+      if (task != null) {
+        LocationService().startTracking(driverProfile.id);
+      } else {
+        LocationService().stopTracking();
+      }
     } catch (error) {
       if (!mounted) {
         return;
@@ -145,6 +258,11 @@ class _HomePageState extends State<HomePage> {
 
       if (!mounted) {
         return;
+      }
+
+      if (status == DeliveryStatus.completed ||
+          status == DeliveryStatus.delivered) {
+        LocationService().stopTracking();
       }
 
       await _loadCurrentTask();
@@ -333,21 +451,22 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
+  bool _isTaskMatching(DeliveryTask task, String query) {
+    if (query.isEmpty) return true;
+    final q = query.toLowerCase();
+    return task.trackingNumber.toLowerCase().contains(q) ||
+        task.recipientName.toLowerCase().contains(q) ||
+        task.itemName.toLowerCase().contains(q) ||
+        task.recipientAddress.toLowerCase().contains(q);
+  }
+
   @override
   Widget build(BuildContext context) {
+    final task = _currentTask;
+    final isMatching = task == null || widget.searchQuery.isEmpty || _isTaskMatching(task, widget.searchQuery);
+
     return Scaffold(
       backgroundColor: Colors.white,
-      appBar: AppBar(
-        title: Image.asset(
-          'assets/logo_arkadaya.png',
-          height: 80,
-          fit: BoxFit.contain,
-        ),
-        titleSpacing: 20,
-        backgroundColor: Colors.white,
-        foregroundColor: const Color(0xff003366),
-        elevation: 0,
-      ),
       body: RefreshIndicator(
         onRefresh: _loadCurrentTask,
         child: ListView(
@@ -376,7 +495,7 @@ class _HomePageState extends State<HomePage> {
                 actionLabel: 'Coba lagi',
                 onPressed: _loadCurrentTask,
               )
-            else if (_currentTask == null)
+            else if (task == null)
               _InfoCard(
                 title: 'Belum ada tugas aktif',
                 description:
@@ -384,16 +503,23 @@ class _HomePageState extends State<HomePage> {
                 actionLabel: 'Refresh',
                 onPressed: _loadCurrentTask,
               )
+            else if (!isMatching)
+              _InfoCard(
+                title: 'Pencarian tidak ditemukan',
+                description: 'Tidak ada tugas aktif yang cocok dengan pencarian "${widget.searchQuery}".',
+                actionLabel: 'Refresh',
+                onPressed: _loadCurrentTask,
+              )
             else
               _TaskCard(
-                task: _currentTask!,
+                task: task,
                 isUpdatingStatus: _isUpdatingStatus,
                 isUploadingProof: _isUploadingProof,
                 onOpenMaps: _openMaps,
                 onChangeStatus: _showStatusDialog,
                 onUploadProof: _showUploadOptions,
                 onViewProof: (index) =>
-                    _showProofGallery(_currentTask!.proofImageUrls, index),
+                    _showProofGallery(task.proofImageUrls, index),
               ),
           ],
         ),
